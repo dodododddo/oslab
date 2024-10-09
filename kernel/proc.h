@@ -104,3 +104,6 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 };
+
+// 在文件末尾添加
+extern struct proc proc[NPROC];
