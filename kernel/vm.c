@@ -15,6 +15,51 @@ extern char etext[];  // kernel.ld sets this to end of kernel code.
 
 extern char trampoline[];  // trampoline.S
 
+void _vmprint(pagetable_t pagetable, int level, uint64 va_part) {
+    // 对于每一级页表
+    for(int i = 0; i < 512; i++) {
+        pte_t pte = pagetable[i];
+        if(pte & PTE_V) {  // 如果页表项有效
+            // 打印缩进
+            for(int j = 0; j < level; j++) {
+                printf("||   ");
+            }
+            printf("||idx: %d: ", i);
+            
+            uint64 pa = PTE2PA(pte);
+            
+            if((pte & (PTE_R|PTE_W|PTE_X)) == 0) {
+                // 指向下一级页表的PTE
+                printf("pa: %p, flags: ", pa);
+                // 打印标志位
+                printf("%s%s%s%s\n", 
+                    (pte & PTE_R) ? "r" : "-",
+                    (pte & PTE_W) ? "w" : "-",
+                    (pte & PTE_X) ? "x" : "-",
+                    (pte & PTE_U) ? "u" : "-");
+                va_part = va_part | ((uint64)i << (9 * (2 - level) + 12));
+                // 递归处理下一级
+                _vmprint((pagetable_t)pa, level + 1, va_part);
+            } else {
+                // 叶子PTE
+                uint64 va = (uint64)i << (9 * (2 - level) + 12);
+                va = va_part | va;
+                printf("va: %p -> pa: %p, flags: ", va, pa);
+                // 打印标志位
+                printf("%s%s%s%s\n",
+                    (pte & PTE_R) ? "r" : "-",
+                    (pte & PTE_W) ? "w" : "-",
+                    (pte & PTE_X) ? "x" : "-",
+                    (pte & PTE_U) ? "u" : "-");
+            }
+        }
+    }
+}
+
+void vmprint(pagetable_t pagetable) {
+    printf("page table %p\n", pagetable);
+    _vmprint(pagetable, 0, 0);
+}
 /*
  * create a direct-map page table for the kernel.
  */
