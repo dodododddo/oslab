@@ -92,6 +92,8 @@ int             fork(void);
 int             growproc(int);
 pagetable_t     proc_pagetable(struct proc *);
 void            proc_freepagetable(pagetable_t, uint64);
+pagetable_t     proc_kpagetable(struct proc *);
+void            proc_freekpagetable(pagetable_t, uint64);
 int             kill(int);
 struct cpu*     mycpu(void);
 struct cpu*     getmycpu(void);
@@ -180,6 +182,7 @@ int             copyout(pagetable_t, uint64, char *, uint64);
 int             copyin(pagetable_t, char *, uint64, uint64);
 int             copyinstr(pagetable_t, char *, uint64, uint64);
 int             test_pagetable();
+void            freewalk_kernel(pagetable_t pagetable);
 
 // plic.c
 void            plicinit(void);
