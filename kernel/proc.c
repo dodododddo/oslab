@@ -137,7 +137,7 @@ static void freeproc(struct proc *p) {
   if (p->trapframe) kfree((void *)p->trapframe);
   p->trapframe = 0;
   if (p->pagetable) proc_freepagetable(p->pagetable, p->sz);
-  if (p->kpagetable) proc_freekpagetable(p->kpagetable, p->kstack);
+  if (p->kpagetable) proc_freekpagetable(p->kpagetable);
   p->pagetable = 0;
   p->kpagetable = 0;
   p->sz = 0;
@@ -192,37 +192,55 @@ pagetable_t proc_kpagetable(struct proc *p) {
   pagetable = uvmcreate();
   if (pagetable == 0) return 0;
   // uart registers
-  if (mappages(pagetable, UART0, PGSIZE, UART0, PTE_R | PTE_W) < 0) panic("uart");
+  if (mappages(pagetable, UART0, PGSIZE, UART0, PTE_R | PTE_W) < 0) {
+    freewalk_kernel(pagetable);
+    return 0;
+  }
 
   // virtio mmio disk interface
-  if (mappages(pagetable, VIRTIO0, PGSIZE, VIRTIO0, PTE_R | PTE_W) < 0) panic("virtio");
+  if (mappages(pagetable, VIRTIO0, PGSIZE, VIRTIO0, PTE_R | PTE_W) < 0) {
+    freewalk_kernel(pagetable);
+    return 0;
+  }
 
   // PLIC
-  if (mappages(pagetable, PLIC, 0x400000, PLIC, PTE_R | PTE_W) < 0) panic("plic");
+  if (mappages(pagetable, PLIC, 0x400000, PLIC, PTE_R | PTE_W) < 0) {
+    freewalk_kernel(pagetable);
+    return 0;
+  }
 
   // map kernel text executable and read-only.
-  if (mappages(pagetable, KERNBASE, (uint64)etext - KERNBASE, KERNBASE, PTE_R | PTE_X) < 0) panic("kernel");
+  if (mappages(pagetable, KERNBASE, (uint64)etext - KERNBASE, KERNBASE, PTE_R | PTE_X) < 0) {
+    freewalk_kernel(pagetable);
+    return 0;
+  }
 
   // map kernel data and the physical RAM we'll make use of.
-  if (mappages(pagetable, (uint64)etext, PHYSTOP - (uint64)etext, (uint64)etext, PTE_R | PTE_W) < 0) panic("kerneldata");
+  if (mappages(pagetable, (uint64)etext, PHYSTOP - (uint64)etext, (uint64)etext, PTE_R | PTE_W) < 0) {
+    freewalk_kernel(pagetable);
+    return 0;
+  }
 
   // map the trampoline for trap entry/exit to
   // the highest virtual address in the kernel.
-  if (mappages(pagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X) < 0) panic("trampoline");
+  if (mappages(pagetable, TRAMPOLINE, PGSIZE, (uint64)trampoline, PTE_R | PTE_X) < 0) {
+    freewalk_kernel(pagetable);
+    return 0;
+  }
 
   // map kernel stack
   for (struct proc *t = proc; t < &proc[NPROC]; t++) {
     if (mappages(pagetable, t->kstack, PGSIZE, t->kstack_pa, PTE_R | PTE_W) < 0) {
-      panic("kernelstack");
+      freewalk_kernel(pagetable);
+      return 0;
     }
   }
   return pagetable;
 }
 
 
-void proc_freekpagetable(pagetable_t pagetable, uint64 kstackva) {
+void proc_freekpagetable(pagetable_t pagetable) {
   if ((uint64)pagetable == (r_satp() << 12)) {
-    printf("avoid free self kernel\n");  // shouldn't be reached actually
     w_satp(MAKE_SATP(kernel_pagetable));
     sfence_vma();
   }
@@ -247,6 +265,7 @@ void userinit(void) {
   // allocate one user page and copy init's instructions
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
+  if(sync_pagetable(p->pagetable,p->kpagetable) < 0) panic("userinit failed when sync pagetable");
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
@@ -272,6 +291,9 @@ int growproc(int n) {
   sz = p->sz;
   if (n > 0) {
     if ((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
+      return -1;
+    }
+    if(sync_pagetable(p->pagetable,p->kpagetable) < 0) {
       return -1;
     }
   } else if (n < 0) {
@@ -300,6 +322,12 @@ int fork(void) {
     return -1;
   }
   np->sz = p->sz;
+
+  if(sync_pagetable(np->pagetable,np->kpagetable) < 0) {
+    freeproc(np);
+    release(&np->lock);
+    return -1;
+  }
 
   np->parent = p;
 

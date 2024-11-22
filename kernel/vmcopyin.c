@@ -27,7 +27,6 @@ int statscopyin(char *buf, int sz) {
 // Return 0 on success, -1 on error.
 int copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
   struct proc *p = myproc();
-
   if (srcva >= p->sz || srcva + len >= p->sz || srcva + len < srcva) return -1;
   memmove((void *)dst, (void *)srcva, len);
   stats.ncopyin++;  // XXX lock
@@ -41,7 +40,6 @@ int copyin_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
 int copyinstr_new(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
   struct proc *p = myproc();
   char *s = (char *)srcva;
-
   stats.ncopyinstr++;  // XXX lock
   for (int i = 0; i < max && srcva + i < p->sz; i++) {
     dst[i] = s[i];

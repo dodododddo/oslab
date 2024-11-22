@@ -45,6 +45,7 @@ w_mepc(uint64 x)
 #define SSTATUS_UPIE (1L << 4) // User Previous Interrupt Enable
 #define SSTATUS_SIE (1L << 1)  // Supervisor Interrupt Enable
 #define SSTATUS_UIE (1L << 0)  // User Interrupt Enable
+#define SSTATUS_SUM (1L << 18) // User Memory Protection
 
 static inline uint64
 r_sstatus()
@@ -351,6 +352,13 @@ sfence_vma()
 #define PTE2PA(pte) (((pte) >> 10) << 12)
 
 #define PTE_FLAGS(pte) ((pte) & 0x3FF)
+
+// 计算虚拟地址的宏
+#define MAKE_VA(l2, l1) (((uint64)(l2) << 18 | (uint64)(l1) << 9) << 12)
+
+// 判断是否为用户空间地址
+#define IS_USER_VA(va) ((va) < PLIC)
+
 
 // extract the three 9-bit page table indices from a virtual address.
 #define PXMASK          0x1FF // 9 bits
